@@ -14,34 +14,60 @@ import {
   useSmartKitchen,
 } from "./context/SmartKitchenContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { AuthProvider, useAuth } from "../src/state/useAuthStore.tsx";
 
 function AppContent() {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useSmartKitchen();
+  const { isLoggedIn, loading } = useAuth();
   const { theme } = useTheme();
+  
+  // Use new auth state
+  const isAuthenticated = isLoggedIn;
+  const isLoading = loading;
 
   // Routes where bottom bar should be hidden
   const hideBar =
     pathname.startsWith("/login") ||
     pathname.startsWith("/face/enroll") ||
     pathname.startsWith("/face/verify") ||
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/test-connection") ||
     pathname === "/";
 
-  // Auth guard
+  // Auth guard - allow access when logged in or on public routes
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      const publicRoutes = ["/login", "/face/verify", "/"];
-      const isPublicRoute = publicRoutes.some(
-        (route) =>
-          pathname === route ||
-          pathname.startsWith("/login") ||
-          pathname.startsWith("/face/verify")
-      );
+    console.log('[Auth Guard] Check:', { 
+      pathname, 
+      isAuthenticated, 
+      isLoading 
+    });
+    
+    // Don't check auth while still loading
+    if (isLoading) {
+      return;
+    }
+    
+    // Define public routes (no auth required)
+    const publicRoutes = [
+      "/",
+      "/login",
+      "/face/verify",
+      "/face/enroll",
+      "/register",
+      "/admin",
+      "/test-connection"
+    ];
+    
+    const isPublicRoute = publicRoutes.some(route => 
+      pathname === route || pathname.startsWith(route)
+    );
 
-      if (!isPublicRoute) {
-        router.replace("/login");
-      }
+    // Only redirect to login if NOT authenticated AND NOT on public route
+    if (!isAuthenticated && !isPublicRoute) {
+      console.log('[Auth Guard] Redirecting to login - not authenticated');
+      router.replace("/login");
     }
   }, [isAuthenticated, isLoading, pathname]);
 
@@ -63,6 +89,10 @@ function AppContent() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login/index" />
+        <Stack.Screen name="register/index" />
+        <Stack.Screen name="reservations/index" />
+        <Stack.Screen name="admin/index" />
+        <Stack.Screen name="test-connection/index" />
         <Stack.Screen name="home/index" />
         <Stack.Screen name="kitchen/index" />
         <Stack.Screen name="book/index" />
@@ -190,9 +220,11 @@ function AppWithTheme() {
 
 export default function RootLayout() {
   return (
-    <SmartKitchenProvider>
-      <AppWithTheme />
-    </SmartKitchenProvider>
+    <AuthProvider>
+      <SmartKitchenProvider>
+        <AppWithTheme />
+      </SmartKitchenProvider>
+    </AuthProvider>
   );
 }
 

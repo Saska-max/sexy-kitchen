@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Dimensions,
     SafeAreaView,
     StyleSheet,
@@ -13,8 +14,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { verifyFace } from "../../services/api";
-import { useSmartKitchen } from "../context/SmartKitchenContext";
+import { loginWithFace } from "../../src/api/smartKitchen";
+import { useAuth } from "../../src/state/useAuthStore.tsx";
 import { useTheme } from "../context/ThemeContext";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -24,13 +25,15 @@ type VerifyStep = "camera" | "processing" | "success" | "error";
 export default function FaceVerifyScreen() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { setAuth } = useSmartKitchen();
+  const { setUser } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
   const [step, setStep] = useState<VerifyStep>("camera");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [matchedUser, setMatchedUser] = useState<any>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
     if (!permission?.granted) {
@@ -39,40 +42,90 @@ export default function FaceVerifyScreen() {
   }, [permission]);
 
   const handleCapture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current) {
+      console.log('[Face Verify] Camera ref not available');
+      console.log('[Face Verify] cameraRef.current:', cameraRef.current);
+      return;
+    }
 
-    setStep("processing");
+    if (!cameraReady) {
+      console.log('[Face Verify] Camera not ready yet');
+      Alert.alert('Camera Not Ready', 'Please wait a moment for the camera to initialize.');
+      return;
+    }
+
+    if (isCapturing) {
+      console.log('[Face Verify] Already capturing, ignoring...');
+      return;
+    }
+
+    console.log('[Face Verify] Starting capture...');
+    setIsCapturing(true);
 
     try {
+      console.log('[Face Verify] Taking picture...');
+      console.log('[Face Verify] cameraRef.current:', cameraRef.current);
+      
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
         quality: 0.8,
+        skipProcessing: false,
+        imageType: 'jpg',
       });
 
-      if (!photo?.base64) {
-        throw new Error("Failed to capture image");
+      console.log('[Face Verify] Photo captured:', photo ? 'Success' : 'Failed');
+      console.log('[Face Verify] Photo URI:', photo?.uri);
+
+      if (!photo?.uri) {
+        throw new Error("Failed to capture image - no URI returned");
       }
 
-      const response = await verifyFace(photo.base64);
+      // Now that we have the photo, we can change to processing step
+      setStep("processing");
 
-      if (response.success && response.token && response.user) {
+      console.log('[Face Verify] Calling loginWithFace API...');
+      const response = await loginWithFace(photo.uri);
+
+      if (response.success && response.user) {
         setMatchedUser(response.user);
-        await setAuth(response.token, response.user);
+        setUser(response.user);
         setStep("success");
         
+        // Navigate to reservations after successful face login
         setTimeout(() => {
-          router.replace("/home");
+          router.replace("/reservations");
         }, 1500);
       } else {
         throw new Error(response.message || "Face verification failed");
       }
     } catch (error: any) {
-      console.error("Face verification error:", error);
-      setErrorMessage(
-        error.response?.data?.message ||
-          error.message ||
-          "Face not recognized. Please try again or use ISIC login."
-      );
+      console.error("[Face Verify] ERROR:", error);
+      console.error("[Face Verify] Error code:", error.code);
+      console.error("[Face Verify] Error message:", error.message);
+      console.error("[Face Verify] Error details:", JSON.stringify(error, null, 2));
+      
+      let errorMessage = "Face not recognized. Please try again or use ISIC login.";
+      
+      // Handle camera errors
+      if (error.code === 'ERR_IMAGE_CAPTURE_FAILED' || error.code === 'ERR_CAMERA_UNAVAILABLE') {
+        errorMessage = "Camera error. Please grant camera permissions and try again.";
+      } else if (error.message && error.message.includes('takePictureAsync')) {
+        errorMessage = "Camera not available. Please go back and try again.";
+      } else if (error.status === 0) {
+        if (error.message && error.message.includes('timeout')) {
+          errorMessage = "Request timeout. Backend might be starting up. Please wait and try again.";
+        } else {
+          errorMessage = "Network error. Please check your internet connection and try again.";
+        }
+      } else if (error.detail) {
+        errorMessage = error.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      setErrorMessage(errorMessage);
+      setIsCapturing(false);
       setStep("error");
     }
   };
@@ -84,6 +137,8 @@ export default function FaceVerifyScreen() {
   const handleRetry = () => {
     setErrorMessage("");
     setMatchedUser(null);
+    setIsCapturing(false);
+    setCameraReady(false);
     setStep("camera");
   };
 
@@ -129,7 +184,20 @@ export default function FaceVerifyScreen() {
   if (step === "camera") {
     return (
       <View style={styles.cameraContainer}>
-        <CameraView ref={cameraRef} style={styles.camera} facing="front">
+        <CameraView 
+          ref={cameraRef} 
+          style={styles.camera} 
+          facing="front"
+          onCameraReady={() => {
+            console.log('[Face Verify] Camera is ready');
+            setCameraReady(true);
+          }}
+          onMountError={(error) => {
+            console.error('[Face Verify] Camera mount error:', error);
+            setErrorMessage('Camera failed to initialize: ' + error.message);
+            setStep("error");
+          }}
+        >
           <SafeAreaView style={styles.cameraOverlay}>
             <View style={styles.cameraHeader}>
               <TouchableOpacity
@@ -162,17 +230,32 @@ export default function FaceVerifyScreen() {
               <Text style={styles.cameraHint}>
                 Position your face in the frame
               </Text>
+              {!cameraReady && (
+                <View style={styles.cameraReadyIndicator}>
+                  <ActivityIndicator color="white" size="small" />
+                  <Text style={styles.cameraReadyText}>Initializing camera...</Text>
+                </View>
+              )}
               <TouchableOpacity
-                style={[styles.captureButton, { shadowColor: theme.primary }]}
+                style={[
+                  styles.captureButton, 
+                  { shadowColor: theme.primary },
+                  (!cameraReady || isCapturing) && styles.captureButtonDisabled
+                ]}
                 onPress={handleCapture}
                 activeOpacity={0.8}
+                disabled={!cameraReady || isCapturing}
               >
                 <LinearGradient
-                  colors={[theme.gradient1, theme.gradient2]}
+                  colors={(cameraReady && !isCapturing) ? [theme.gradient1, theme.gradient2] : ['#666', '#666']}
                   style={styles.captureButtonGradient}
                 >
                   <View style={styles.captureButtonInner}>
-                    <Ionicons name="scan" size={32} color={theme.primary} />
+                    {isCapturing ? (
+                      <ActivityIndicator color={theme.primary} size="large" />
+                    ) : (
+                      <Ionicons name="scan" size={32} color={theme.primary} />
+                    )}
                   </View>
                 </LinearGradient>
               </TouchableOpacity>
@@ -225,7 +308,7 @@ export default function FaceVerifyScreen() {
               </View>
               <View>
                 <Text style={styles.matchedUserName}>{matchedUser.name}</Text>
-                <Text style={styles.matchedUserIsic}>{matchedUser.isic}</Text>
+                <Text style={styles.matchedUserIsic}>{matchedUser.isic_number}</Text>
               </View>
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={16} color={theme.success} />
@@ -572,6 +655,20 @@ const styles = StyleSheet.create({
   isicLinkText: {
     color: "rgba(255,255,255,0.9)",
     fontSize: 14,
+    fontWeight: "500",
+  },
+  captureButtonDisabled: {
+    opacity: 0.5,
+  },
+  cameraReadyIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  cameraReadyText: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 13,
     fontWeight: "500",
   },
   

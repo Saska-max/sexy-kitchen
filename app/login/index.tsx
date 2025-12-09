@@ -17,12 +17,18 @@ import {
     TouchableWithoutFeedback,
     View,
 } from "react-native";
-import { login, validateISIC } from "../../services/api";
-import { useSmartKitchen } from "../context/SmartKitchenContext";
+import { getUser } from "../../src/api/smartKitchen";
+import { useAuth } from "../../src/state/useAuthStore.tsx";
 import { useTheme } from "../context/ThemeContext";
 
+// Validate ISIC format: S followed by 10-11 digits
+function validateISIC(isic: string): boolean {
+  const isicRegex = /^S\d{10,11}$/;
+  return isicRegex.test(isic);
+}
+
 export default function LoginScreen() {
-  const { setAuth } = useSmartKitchen();
+  const { setUser } = useAuth();
   const { theme } = useTheme();
   const [isic, setIsic] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -34,19 +40,71 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (!canSubmit) return;
 
+    console.log('[Login] Starting login...');
+    console.log('[Login] ISIC:', isic);
+
+    Keyboard.dismiss();
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await login(isic);
-      await setAuth(response.token, response.user);
-      router.replace("/home");
+      console.log('[Login] Checking if user exists...');
+      // Check if user exists in backend
+      const response = await getUser(isic.toUpperCase());
+      
+      console.log('[Login] API Response:', JSON.stringify(response, null, 2));
+      
+      if (response.exists) {
+        console.log('[Login] User exists! Setting user state...');
+        // User exists, set them as logged in
+        setUser({
+          isic_number: isic.toUpperCase(),
+          name: response.name,
+          hasFace: response.hasFace,
+        });
+        
+        console.log('[Login] User has face?', response.hasFace);
+        console.log('[Login] User state set, waiting before navigation...');
+        
+        // Navigate based on whether they have face enrolled
+        // Add delay to let state propagate to auth guard
+        if (response.hasFace) {
+          console.log('[Login] Will navigate to reservations...');
+          // Has face, go to reservations
+          setTimeout(() => {
+            console.log('[Login] Navigating NOW to reservations');
+            router.replace("/reservations");
+          }, 300);
+        } else {
+          console.log('[Login] Will navigate to face enrollment...');
+          // No face enrolled, go to face enrollment
+          setTimeout(() => {
+            console.log('[Login] Navigating NOW to face enrollment');
+            router.replace("/face/enroll");
+          }, 300);
+        }
+      } else {
+        console.error('[Login] User not found');
+        setError("User not found. Please register first.");
+      }
     } catch (err: any) {
-      console.error("Login error:", err);
-      const errorMessage =
-        err.response?.data?.message ||
-        err.message ||
-        "Login failed. Please check your connection and try again.";
+      console.error("[Login] ERROR:", err);
+      console.error("[Login] Error details:", JSON.stringify(err, null, 2));
+      
+      let errorMessage = "Login failed. Please check your connection and try again.";
+      
+      if (err.status === 0) {
+        if (err.message && err.message.includes('timeout')) {
+          errorMessage = "Request timeout. The backend might be starting up. Please wait 10 seconds and try again.";
+        } else {
+          errorMessage = "Network error. Please check your internet connection and try again.";
+        }
+      } else if (err.detail) {
+        errorMessage = err.detail;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -190,14 +248,52 @@ export default function LoginScreen() {
                   <Ionicons name="scan-outline" size={20} color={theme.primary} />
                   <Text style={[styles.faceButtonText, { color: theme.primary }]}>Login with Face ID</Text>
                 </TouchableOpacity>
+
+                {/* Register Button */}
+                <TouchableOpacity
+                  style={[styles.registerButton, { backgroundColor: theme.background, borderColor: theme.primary }]}
+                  onPress={() => router.push("/register")}
+                  disabled={isLoading}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="person-add-outline" size={20} color={theme.primary} />
+                  <Text style={[styles.registerButtonText, { color: theme.primary }]}>
+                    Create New Account
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* Footer */}
               <View style={styles.footer}>
-                <Ionicons name="shield-checkmark-outline" size={16} color={theme.textSecondary} />
-                <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-                  Secure access to shared kitchen facilities
-                </Text>
+                <View style={styles.footerRow}>
+                  <Ionicons name="shield-checkmark-outline" size={16} color={theme.textSecondary} />
+                  <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+                    Secure access to shared kitchen facilities
+                  </Text>
+                </View>
+                <View style={styles.debugButtons}>
+                  <TouchableOpacity
+                    style={[styles.debugButton, { backgroundColor: theme.error + "20", borderColor: theme.error }]}
+                    onPress={() => router.push("/test-connection")}
+                  >
+                    <Ionicons name="wifi-outline" size={14} color={theme.error} />
+                    <Text style={[styles.debugButtonText, { color: theme.error }]}>Test</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.debugButton, { backgroundColor: theme.border }]}
+                    onPress={() => router.push("/admin")}
+                  >
+                    <Ionicons name="bug-outline" size={14} color={theme.textSecondary} />
+                    <Text style={[styles.debugButtonText, { color: theme.textSecondary }]}>Debug</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.debugButton, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}
+                    onPress={() => router.push("/reservations")}
+                  >
+                    <Ionicons name="calendar-outline" size={14} color={theme.primary} />
+                    <Text style={[styles.debugButtonText, { color: theme.primary }]}>Reservations</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </ScrollView>
@@ -391,13 +487,49 @@ const styles = StyleSheet.create({
 
   // Footer
   footer: {
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
     marginTop: 28,
+    gap: 12,
+  },
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   footerText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  debugButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  debugButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+    borderWidth: 1,
+  },
+  debugButtonText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  registerButton: {
+    height: 56,
+    borderRadius: 18,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 2,
+    marginTop: 12,
+  },
+  registerButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

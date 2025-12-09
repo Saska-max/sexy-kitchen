@@ -15,8 +15,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { enrollFace } from "../../services/api";
-import { useSmartKitchen } from "../context/SmartKitchenContext";
+import { enrollFace } from "../../src/api/smartKitchen";
+import { useAuth } from "../../src/state/useAuthStore.tsx";
 import { useTheme } from "../context/ThemeContext";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -26,12 +26,14 @@ type EnrollmentStep = "instructions" | "camera" | "processing" | "success" | "er
 export default function FaceEnrollScreen() {
   const router = useRouter();
   const { theme } = useTheme();
-  const { user, setFaceEnrolled, updateUser } = useSmartKitchen();
+  const { currentUser, setUser } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
   const [step, setStep] = useState<EnrollmentStep>("instructions");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [cameraReady, setCameraReady] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   const handleStartEnrollment = async () => {
     if (!permission?.granted) {
@@ -48,38 +50,97 @@ export default function FaceEnrollScreen() {
   };
 
   const handleCapture = async () => {
-    if (!cameraRef.current || !user) return;
+    if (!cameraRef.current || !currentUser) {
+      console.log('[Face Enroll] Camera ref or user not available');
+      console.log('[Face Enroll] cameraRef.current:', cameraRef.current);
+      console.log('[Face Enroll] currentUser:', currentUser);
+      return;
+    }
 
-    setStep("processing");
+    if (!cameraReady) {
+      console.log('[Face Enroll] Camera not ready yet');
+      Alert.alert('Camera Not Ready', 'Please wait a moment for the camera to initialize.');
+      return;
+    }
+
+    if (isCapturing) {
+      console.log('[Face Enroll] Already capturing, ignoring...');
+      return;
+    }
+
+    console.log('[Face Enroll] Starting capture...');
+    setIsCapturing(true);
 
     try {
+      console.log('[Face Enroll] Taking picture...');
+      console.log('[Face Enroll] cameraRef.current:', cameraRef.current);
+      
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
         quality: 0.8,
+        skipProcessing: false,
+        imageType: 'jpg',
       });
 
-      if (!photo?.base64) {
-        throw new Error("Failed to capture image");
+      console.log('[Face Enroll] Photo captured:', photo ? 'Success' : 'Failed');
+      console.log('[Face Enroll] Photo URI:', photo?.uri);
+
+      if (!photo?.uri) {
+        throw new Error("Failed to capture image - no URI returned");
       }
 
-      const response = await enrollFace(photo.base64, user.isic);
+      // Now that we have the photo, we can change to processing step
+      setStep("processing");
+
+      console.log('[Face Enroll] Calling enrollFace API...');
+      const response = await enrollFace(currentUser.isic_number, photo.uri);
+
+      console.log('[Face Enroll] API Response:', JSON.stringify(response, null, 2));
 
       if (response.success) {
-        setFaceEnrolled(true);
-        if (response.user) {
-          updateUser(response.user);
+        console.log('[Face Enroll] Success! Face enrolled');
+        // Update user to mark face as enrolled
+        if (currentUser) {
+          setUser({ ...currentUser, hasFace: true });
         }
         setStep("success");
+        
+        // After showing success, navigate to reservations
+        setTimeout(() => {
+          console.log('[Face Enroll] Navigating to reservations after success');
+          router.replace("/reservations");
+        }, 2000);
       } else {
         throw new Error(response.message || "Enrollment failed");
       }
     } catch (error: any) {
-      console.error("Face enrollment error:", error);
-      setErrorMessage(
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to enroll face. Please try again."
-      );
+      console.error("[Face Enroll] ERROR:", error);
+      console.error("[Face Enroll] Error code:", error.code);
+      console.error("[Face Enroll] Error message:", error.message);
+      console.error("[Face Enroll] Error details:", JSON.stringify(error, null, 2));
+      
+      let errorMessage = "Failed to enroll face. Please try again.";
+      
+      // Handle camera errors
+      if (error.code === 'ERR_IMAGE_CAPTURE_FAILED' || error.code === 'ERR_CAMERA_UNAVAILABLE') {
+        errorMessage = "Camera error. Please grant camera permissions and try again.";
+      } else if (error.message && error.message.includes('takePictureAsync')) {
+        errorMessage = "Camera not available. Please go back and try again.";
+      } else if (error.status === 0) {
+        if (error.message && error.message.includes('timeout')) {
+          errorMessage = "Request timeout. Backend might be starting up. Please wait and try again.";
+        } else {
+          errorMessage = "Network error. Please check your internet connection and try again.";
+        }
+      } else if (error.detail) {
+        errorMessage = error.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      setErrorMessage(errorMessage);
+      setIsCapturing(false);
       setStep("error");
     }
   };
@@ -90,7 +151,9 @@ export default function FaceEnrollScreen() {
 
   const handleRetry = () => {
     setErrorMessage("");
-    setStep("camera");
+    setIsCapturing(false);
+    setCameraReady(false);
+    setStep("instructions");
   };
 
   // Instructions step
@@ -128,7 +191,7 @@ export default function FaceEnrollScreen() {
           
           <View style={[styles.isicCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary + "40" }]}>
             <Ionicons name="card-outline" size={20} color={theme.primary} />
-            <Text style={[styles.isicText, { color: theme.primary }]}>{user?.isic}</Text>
+            <Text style={[styles.isicText, { color: theme.primary }]}>{currentUser?.isic_number}</Text>
           </View>
 
           <View style={styles.instructionsList}>
@@ -202,6 +265,16 @@ export default function FaceEnrollScreen() {
           <TouchableOpacity style={styles.secondaryButton} onPress={handleClose}>
             <Text style={[styles.secondaryButtonText, { color: theme.textSecondary }]}>Cancel</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.skipButton, { backgroundColor: theme.background, borderColor: theme.border }]} 
+            onPress={() => router.replace("/reservations")}
+          >
+            <Ionicons name="arrow-forward-outline" size={18} color={theme.textSecondary} />
+            <Text style={[styles.skipButtonText, { color: theme.textSecondary }]}>
+              Skip for Now (Go to Reservations)
+            </Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -211,7 +284,20 @@ export default function FaceEnrollScreen() {
   if (step === "camera") {
     return (
       <View style={styles.cameraContainer}>
-        <CameraView ref={cameraRef} style={styles.camera} facing="front">
+        <CameraView 
+          ref={cameraRef} 
+          style={styles.camera} 
+          facing="front"
+          onCameraReady={() => {
+            console.log('[Face Enroll] Camera is ready');
+            setCameraReady(true);
+          }}
+          onMountError={(error) => {
+            console.error('[Face Enroll] Camera mount error:', error);
+            setErrorMessage('Camera failed to initialize: ' + error.message);
+            setStep("error");
+          }}
+        >
           <SafeAreaView style={styles.cameraOverlay}>
             <View style={styles.cameraHeader}>
               <TouchableOpacity
@@ -234,7 +320,7 @@ export default function FaceEnrollScreen() {
               </View>
               <View style={[styles.isicLabelContainer, { backgroundColor: theme.primary }]}>
                 <Ionicons name="card-outline" size={14} color="white" />
-                <Text style={styles.isicLabel}>{user?.isic}</Text>
+                <Text style={styles.isicLabel}>{currentUser?.isic_number}</Text>
               </View>
             </View>
 
@@ -242,19 +328,36 @@ export default function FaceEnrollScreen() {
               <Text style={styles.cameraHint}>
                 Align your face within the frame
               </Text>
+              {!cameraReady && (
+                <View style={styles.cameraReadyIndicator}>
+                  <ActivityIndicator color="white" size="small" />
+                  <Text style={styles.cameraReadyText}>Initializing camera...</Text>
+                </View>
+              )}
               <TouchableOpacity
-                style={[styles.captureButton, { shadowColor: theme.primary }]}
+                style={[
+                  styles.captureButton, 
+                  { shadowColor: theme.primary },
+                  (!cameraReady || isCapturing) && styles.captureButtonDisabled
+                ]}
                 onPress={handleCapture}
                 activeOpacity={0.8}
+                disabled={!cameraReady || isCapturing}
               >
                 <LinearGradient
-                  colors={[theme.gradient1, theme.gradient2]}
+                  colors={(cameraReady && !isCapturing) ? [theme.gradient1, theme.gradient2] : ['#666', '#666']}
                   style={styles.captureButtonGradient}
                 >
-                  <View style={styles.captureButtonInner} />
+                  {isCapturing ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <View style={styles.captureButtonInner} />
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
-              <Text style={styles.captureTip}>Tap to capture</Text>
+              <Text style={styles.captureTip}>
+                {isCapturing ? 'Capturing...' : cameraReady ? 'Tap to capture' : 'Waiting for camera...'}
+              </Text>
             </View>
           </SafeAreaView>
         </CameraView>
@@ -272,7 +375,7 @@ export default function FaceEnrollScreen() {
           </View>
           <Text style={[styles.processingText, { color: theme.text }]}>Processing your face...</Text>
           <Text style={[styles.processingSubtext, { color: theme.textSecondary }]}>
-            Linking to ISIC: {user?.isic}
+            Linking to ISIC: {currentUser?.isic_number}
           </Text>
           <View style={styles.processingDots}>
             <View style={[styles.dot, { backgroundColor: theme.primary }]} />
@@ -302,7 +405,7 @@ export default function FaceEnrollScreen() {
           
           <View style={[styles.successIsicBadge, { backgroundColor: theme.primaryLight, borderColor: theme.primary + "40" }]}>
             <Ionicons name="card-outline" size={18} color={theme.primary} />
-            <Text style={[styles.successIsicText, { color: theme.primary }]}>{user?.isic}</Text>
+            <Text style={[styles.successIsicText, { color: theme.primary }]}>{currentUser?.isic_number}</Text>
             <View style={[styles.linkedBadge, { backgroundColor: theme.success + "20" }]}>
               <Ionicons name="checkmark-circle" size={14} color={theme.success} />
               <Text style={[styles.linkedText, { color: theme.success }]}>Linked</Text>
@@ -503,6 +606,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  skipButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 2,
+    gap: 8,
+    marginTop: 8,
+  },
+  skipButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
   
   // Camera styles
   cameraContainer: {
@@ -651,6 +768,20 @@ const styles = StyleSheet.create({
   },
   captureTip: {
     color: "rgba(255,255,255,0.7)",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  captureButtonDisabled: {
+    opacity: 0.5,
+  },
+  cameraReadyIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  cameraReadyText: {
+    color: "rgba(255,255,255,0.8)",
     fontSize: 13,
     fontWeight: "500",
   },
