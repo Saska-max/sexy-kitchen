@@ -4,14 +4,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
+  ActivityIndicator,
     Alert,
-    SafeAreaView,
+  SafeAreaView,
     ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSmartKitchen } from "../context/SmartKitchenContext";
 import { useTheme } from "../context/ThemeContext";
@@ -37,7 +37,7 @@ export default function FaceScreen() {
           style: "destructive",
           onPress: async () => {
             setIsRemoving(true);
-            setTimeout(() => {
+    setTimeout(() => {
               setFaceEnrolled(false);
               setIsRemoving(false);
             }, 500);
@@ -92,7 +92,7 @@ export default function FaceScreen() {
               {isFaceEnrolled
                 ? `Linked to ISIC: ${user?.isic}`
                 : "Face ID will be linked to your ISIC account"}
-            </Text>
+          </Text>
           </View>
 
           {/* Face Area */}
@@ -148,7 +148,7 @@ export default function FaceScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity
+          <TouchableOpacity
               style={[styles.enrollButton, { shadowColor: theme.primary }]}
               onPress={handleEnroll}
               activeOpacity={0.8}
@@ -202,7 +202,7 @@ export default function FaceScreen() {
               <Text style={[styles.benefitLabel, { color: theme.text }]}>Contactless</Text>
               <Text style={[styles.benefitDesc, { color: theme.textSecondary }]}>
                 No need to carry your ISIC card
-              </Text>
+            </Text>
             </View>
           </View>
         </View>
@@ -212,8 +212,8 @@ export default function FaceScreen() {
           <Ionicons name="information-circle-outline" size={16} color={theme.textSecondary} />
           <Text style={[styles.footerNote, { color: theme.textSecondary }]}>
             You can still use your ISIC card if Face ID is unavailable.
-          </Text>
-        </View>
+        </Text>
+      </View>
       </ScrollView>
     </SafeAreaView>
   );

@@ -8,12 +8,12 @@ import {
     Alert,
     Modal,
     RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSmartKitchen } from "../context/SmartKitchenContext";
 import { useTheme } from "../context/ThemeContext";
@@ -224,16 +224,16 @@ export default function HomeScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.welcomeGradient}
           >
-            <View style={styles.welcomeIcon}>
+          <View style={styles.welcomeIcon}>
               <Ionicons name="person" size={24} color={theme.primary} />
-            </View>
+          </View>
 
             <View style={styles.welcomeContent}>
               <Text style={styles.welcomeTitle}>
                 Hello{firstName ? `, ${firstName}` : ""}! 👋
               </Text>
               <Text style={styles.welcomeIsic}>{user?.isic || "Loading..."}</Text>
-            </View>
+          </View>
 
             <TouchableOpacity 
               style={styles.settingsBtn}
@@ -252,8 +252,8 @@ export default function HomeScreen() {
             activeOpacity={0.8}
           >
             <View style={[styles.statIconBg, { backgroundColor: isFaceEnrolled ? "#D1FAE5" : theme.primaryLight }]}>
-              <Ionicons
-                name="finger-print"
+            <Ionicons
+              name="finger-print"
                 size={24}
                 color={isFaceEnrolled ? theme.success : theme.textSecondary}
               />
@@ -272,7 +272,7 @@ export default function HomeScreen() {
             <View style={[styles.statIconBg, { backgroundColor: theme.primaryLight }]}>
               <Ionicons name="calendar" size={24} color={theme.primary} />
             </View>
-            <Text 
+            <Text
               style={[styles.statLabel, { color: theme.textSecondary }]} 
               numberOfLines={1}
               adjustsFontSizeToFit={true}
@@ -298,7 +298,7 @@ export default function HomeScreen() {
             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>History</Text>
             <Text style={[styles.statValue, { color: theme.text }]}>{pastReservations.length}</Text>
           </TouchableOpacity>
-        </View>
+          </View>
 
         {/* UPCOMING RESERVATIONS */}
         <View style={styles.sectionHeader}>
@@ -314,7 +314,7 @@ export default function HomeScreen() {
           <View style={[styles.loadingCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <ActivityIndicator size="small" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading...</Text>
-          </View>
+            </View>
         ) : upcomingReservations.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
             <View style={[styles.emptyIcon, { backgroundColor: theme.primaryLight }]}>

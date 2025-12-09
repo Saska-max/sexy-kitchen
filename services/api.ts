@@ -3,8 +3,7 @@ import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
 import * as SecureStore from "expo-secure-store";
 
 // ⚠️ IMPORTANT: Replace with your computer's local IP for Expo Go testing
-// FastAPI backend runs on port 8000
-const BASE_URL = "http://172.20.10.3:8000";
+const BASE_URL = "http://172.20.10.3:5173";
 
 const TOKEN_KEY = "smartkitchen_jwt";
 
@@ -116,17 +115,13 @@ const api: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor to add JWT token as query parameter
+// Request interceptor to add JWT token
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     try {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
-      if (token && config.params) {
-        config.params.token = token;
-      } else if (token && config.url) {
-        // Add token as query parameter if params don't exist
-        const separator = config.url.includes('?') ? '&' : '?';
-        config.url = `${config.url}${separator}token=${token}`;
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (error) {
       console.warn("Error reading token from SecureStore:", error);
@@ -184,10 +179,18 @@ export const validateISIC = (isic: string): boolean => {
 // ============ API FUNCTIONS ============
 
 /**
+ * Register new user with ISIC
+ */
+export const register = async (name: string, isic: string): Promise<LoginResponse> => {
+  const response = await api.post<LoginResponse>("/register", { name, isic });
+  return response.data;
+};
+
+/**
  * Login with ISIC
  */
 export const login = async (isic: string): Promise<LoginResponse> => {
-  const response = await api.post<LoginResponse>(`/login?isic=${encodeURIComponent(isic)}`);
+  const response = await api.post<LoginResponse>("/login", { isic });
   return response.data;
 };
 
@@ -198,22 +201,10 @@ export const enrollFace = async (
   image: string,
   isic: string
 ): Promise<FaceEnrollResponse> => {
-  // Ensure base64 string (add data URI prefix if not present)
-  const base64Image = image.includes(',') ? image : `data:image/jpeg;base64,${image}`;
-  
-  // Use FormData for multipart/form-data
-  const formData = new FormData();
-  formData.append('image', base64Image);
-  
-  const response = await api.post<FaceEnrollResponse>(
-    `/face/enroll?isic=${encodeURIComponent(isic)}`,
-    formData,
-    {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    }
-  );
+  const response = await api.post<FaceEnrollResponse>("/face/enroll", {
+    image,
+    isic,
+  });
   return response.data;
 };
 
@@ -221,22 +212,9 @@ export const enrollFace = async (
  * Verify face for FaceID login
  */
 export const verifyFace = async (image: string): Promise<FaceVerifyResponse> => {
-  // Ensure base64 string (add data URI prefix if not present)
-  const base64Image = image.includes(',') ? image : `data:image/jpeg;base64,${image}`;
-  
-  // Use FormData for multipart/form-data
-  const formData = new FormData();
-  formData.append('image', base64Image);
-  
-  const response = await api.post<FaceVerifyResponse>(
-    "/face/verify",
-    formData,
-    {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    }
-  );
+  const response = await api.post<FaceVerifyResponse>("/face/verify", {
+    image,
+  });
   return response.data;
 };
 
@@ -287,45 +265,30 @@ export const getAvailability = async (
 export const createReservation = async (
   data: CreateReservationData
 ): Promise<Reservation> => {
-  const token = await getToken();
-  const response = await api.post<{ success: boolean; id: string }>(
-    `/reserve?date=${encodeURIComponent(data.date)}&startTime=${encodeURIComponent(data.startTime)}&endTime=${encodeURIComponent(data.endTime)}&kitchenId=${data.kitchenId}&applianceId=${encodeURIComponent(data.applianceId)}&token=${token || ''}`
-  );
-  // Return a reservation object matching the expected format
-  return {
-    id: response.data.id,
-    date: data.date,
-    startTime: data.startTime,
-    endTime: data.endTime,
-    kitchenId: data.kitchenId,
-    applianceId: data.applianceId,
-    applianceType: "",
-    status: "confirmed" as const,
-  };
+  const response = await api.post<Reservation>("/reserve", data);
+  return response.data;
 };
 
 /**
  * Cancel a reservation
  */
 export const cancelReservation = async (id: string): Promise<void> => {
-  const token = await getToken();
-  await api.delete(`/reservation/${id}?token=${token || ''}`);
+  await api.delete(`/reservation/${id}`);
 };
 
 /**
  * Get current user's reservations
  */
 export const getMyReservations = async (): Promise<Reservation[]> => {
-  const token = await getToken();
-  const response = await api.get<Reservation[]>(`/reservations/me?token=${token || ''}`);
+  const response = await api.get<Reservation[]>("/reservations/me");
   return response.data;
 };
 
 export const updateUserTheme = async (theme_palette: string, theme_dark_mode: boolean): Promise<User> => {
-  const token = await getToken();
-  const response = await api.put<{ success: boolean; user: User }>(
-    `/user/theme?theme_palette=${theme_palette}&theme_dark_mode=${theme_dark_mode}&token=${token || ''}`
-  );
+  const response = await api.put<{ success: boolean; user: User }>("/user/theme", {
+    theme_palette,
+    theme_dark_mode,
+  });
   return response.data.user;
 };
 

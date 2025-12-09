@@ -1,26 +1,24 @@
 // app/context/SmartKitchenContext.tsx - v2.0
 import React, {
-    createContext,
-    ReactNode,
-    useCallback,
-    useContext,
-    useEffect,
-    useState,
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
 } from "react";
 import {
-    cancelReservation as apiCancelReservation,
-    createReservation as apiCreateReservation,
-    Appliance,
-    CreateReservationData,
-    getKitchenAppliances,
-    getKitchens,
-    getMyReservations,
-    getToken,
-    Kitchen,
-    removeToken,
-    Reservation,
-    saveToken,
-    User,
+  cancelReservation as apiCancelReservation,
+  createReservation as apiCreateReservation,
+  Appliance,
+  CreateReservationData,
+  getMyReservations,
+  getToken,
+  Kitchen,
+  removeToken,
+  Reservation,
+  saveToken,
+  User
 } from "../../services/api";
 
 interface SmartKitchenContextValue {
@@ -187,10 +185,19 @@ export function SmartKitchenProvider({ children }: { children: ReactNode }) {
 
     setKitchensLoading(true);
     try {
-      const data = await getKitchens();
-      setKitchens(data);
+      // Use mock kitchens data (no backend fetch)
+      const mockKitchens: Kitchen[] = [
+        { id: 1, kitchen_number: 1, floor: 1, name: "Kitchen Floor 1", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+        { id: 2, kitchen_number: 1, floor: 2, name: "Kitchen Floor 2", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+        { id: 3, kitchen_number: 1, floor: 3, name: "Kitchen Floor 3", appliance_counts: { microwave: 1, oven: 1, stove_left: 1, stove_right: 1 } },
+        { id: 4, kitchen_number: 1, floor: 4, name: "Kitchen Floor 4", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+        { id: 5, kitchen_number: 1, floor: 5, name: "Kitchen Floor 5", appliance_counts: { microwave: 1, oven: 1, stove_left: 1, stove_right: 1 } },
+        { id: 6, kitchen_number: 1, floor: 6, name: "Kitchen Floor 6", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+        { id: 7, kitchen_number: 1, floor: 7, name: "Kitchen Floor 7", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+      ];
+      setKitchens(mockKitchens);
     } catch (error: any) {
-      console.error("Error fetching kitchens:", error);
+      console.error("Error setting mock kitchens:", error);
     } finally {
       setKitchensLoading(false);
     }
@@ -205,10 +212,12 @@ export function SmartKitchenProvider({ children }: { children: ReactNode }) {
 
     setAppliancesLoading(true);
     try {
-      const data = await getKitchenAppliances(kitchenId);
-      setAppliances(data);
+      // Appliances are generated from kitchen's appliance_counts in the booking screen
+      // No need to fetch from backend - just set empty array
+      // The booking screen will generate appliances from selectedKitchen.appliance_counts
+      setAppliances([]);
     } catch (error: any) {
-      console.error("Error fetching appliances:", error);
+      console.error("Error setting appliances:", error);
     } finally {
       setAppliancesLoading(false);
     }
@@ -235,7 +244,51 @@ export function SmartKitchenProvider({ children }: { children: ReactNode }) {
 
   const addReservation = useCallback(
     async (data: CreateReservationData): Promise<boolean> => {
-      if (!token) return false;
+      // TEMPORARY: Create mock reservation for UI testing without backend
+      if (!token || token === "mock_token_for_testing") {
+        try {
+          // Find the appliance to get its type
+          const appliance = appliances.find(a => a.id === data.applianceId);
+          let applianceType: string = "microwave";
+          
+          if (appliance) {
+            applianceType = appliance.type;
+          } else {
+            // Fallback: extract type from ID format like "microwave-1"
+            const typeMatch = data.applianceId.match(/^([a-z_]+)-\d+$/);
+            if (typeMatch) {
+              applianceType = typeMatch[1];
+            }
+          }
+
+          // Find the kitchen for the reservation
+          const kitchen = kitchens.find(k => k.id === data.kitchenId);
+
+          // Create a mock reservation
+          const mockReservation: Reservation = {
+            id: `mock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            date: data.date,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            kitchenId: data.kitchenId,
+            applianceId: data.applianceId,
+            applianceType: applianceType as any,
+            status: "confirmed",
+            userId: user?.id || 1,
+            kitchen: kitchen ? {
+              id: kitchen.id,
+              floor: kitchen.floor,
+              kitchen_number: kitchen.kitchen_number,
+            } : undefined,
+          };
+          
+          setReservations((prev) => [...prev, mockReservation]);
+          return true;
+        } catch (error: any) {
+          console.error("Error creating mock reservation:", error);
+          return false;
+        }
+      }
 
       try {
         const newReservation = await apiCreateReservation(data);
@@ -249,12 +302,26 @@ export function SmartKitchenProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [token]
+    [token, user, kitchens, appliances]
   );
 
   const removeReservation = useCallback(
     async (id: string): Promise<boolean> => {
       if (!token) return false;
+
+      // TEMPORARY: Handle mock reservations for UI testing without backend
+      if (token === "mock_token_for_testing") {
+        try {
+          // Update local state to mark as cancelled
+          setReservations((prev) => 
+            prev.map((r) => r.id === id ? { ...r, status: "cancelled" } : r)
+          );
+          return true;
+        } catch (error: any) {
+          console.error("Error cancelling mock reservation:", error);
+          return false;
+        }
+      }
 
       try {
         await apiCancelReservation(id);

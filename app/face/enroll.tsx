@@ -5,17 +5,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { enrollFace } from "../../services/api";
 import { useSmartKitchen } from "../context/SmartKitchenContext";
 import { useTheme } from "../context/ThemeContext";
 
@@ -62,17 +61,26 @@ export default function FaceEnrollScreen() {
         throw new Error("Failed to capture image");
       }
 
-      const response = await enrollFace(photo.base64, user.isic);
+      // TEMPORARY: Bypass backend for UI testing
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      if (response.success) {
-        setFaceEnrolled(true);
-        if (response.user) {
-          updateUser(response.user);
-        }
-        setStep("success");
-      } else {
-        throw new Error(response.message || "Enrollment failed");
-      }
+      // Mock successful enrollment
+      setFaceEnrolled(true);
+      updateUser({ ...user, face_enrolled: true });
+      setStep("success");
+
+      // Original backend code (commented out):
+      // const response = await enrollFace(photo.base64, user.isic);
+      // if (response.success) {
+      //   setFaceEnrolled(true);
+      //   if (response.user) {
+      //     updateUser(response.user);
+      //   }
+      //   setStep("success");
+      // } else {
+      //   throw new Error(response.message || "Enrollment failed");
+      // }
     } catch (error: any) {
       console.error("Face enrollment error:", error);
       setErrorMessage(

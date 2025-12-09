@@ -4,20 +4,21 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
-import { login, validateISIC } from "../../services/api";
+import { validateISIC } from "../../services/api";
 import { useSmartKitchen } from "../context/SmartKitchenContext";
 import { useTheme } from "../context/ThemeContext";
 
@@ -27,9 +28,22 @@ export default function LoginScreen() {
   const [isic, setIsic] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAgreement, setShowAgreement] = useState(true);
+  const [agreementAccepted, setAgreementAccepted] = useState(false);
 
   const isValidFormat = validateISIC(isic);
-  const canSubmit = isValidFormat && !isLoading;
+  const canSubmit = isValidFormat && !isLoading && agreementAccepted;
+
+  const handleAcceptAgreement = () => {
+    if (!agreementAccepted) {
+      Alert.alert(
+        "Agreement Required",
+        "You must accept the data usage agreement to login."
+      );
+      return;
+    }
+    setShowAgreement(false);
+  };
 
   const handleLogin = async () => {
     if (!canSubmit) return;
@@ -38,8 +52,22 @@ export default function LoginScreen() {
     setError(null);
 
     try {
-      const response = await login(isic);
-      await setAuth(response.token, response.user);
+      // TEMPORARY: Bypass backend for UI testing
+      // const response = await login(isic);
+      // await setAuth(response.token, response.user);
+      
+      // Mock user data for testing
+      const mockUser = {
+        id: 1,
+        isic: isic || "S1234567890",
+        name: "Test User",
+        face_enrolled: false,
+        theme_palette: "pink",
+        theme_dark_mode: false,
+      };
+      const mockToken = "mock_token_for_testing";
+      
+      await setAuth(mockToken, mockUser);
       router.replace("/home");
     } catch (err: any) {
       console.error("Login error:", err);
@@ -57,6 +85,76 @@ export default function LoginScreen() {
     router.push("/face/verify");
   };
 
+  // Show agreement modal before login
+  if (showAgreement) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
+        <View style={styles.agreementContainer}>
+          <View style={[styles.agreementCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            <View style={styles.agreementHeader}>
+              <Ionicons name="document-text-outline" size={40} color={theme.primary} />
+              <Text style={[styles.agreementTitle, { color: theme.text }]}>Data Usage Agreement</Text>
+            </View>
+
+            <ScrollView style={styles.agreementContent} showsVerticalScrollIndicator={true}>
+              <Text style={[styles.agreementText, { color: theme.textSecondary }]}>
+                By using this app, you consent to the collection and processing of your ISIC number and Face ID data for authentication and account management purposes.
+              </Text>
+              <Text style={[styles.agreementText, { color: theme.textSecondary }]}>
+                Your data is securely stored and encrypted. You can access, modify, or delete your data at any time through app settings.
+              </Text>
+            </ScrollView>
+
+            <View style={styles.agreementCheckbox}>
+              <TouchableOpacity
+                style={[
+                  styles.checkbox,
+                  {
+                    backgroundColor: agreementAccepted ? theme.primary : theme.inputBg,
+                    borderColor: agreementAccepted ? theme.primary : theme.border,
+                  },
+                ]}
+                onPress={() => setAgreementAccepted(!agreementAccepted)}
+                activeOpacity={0.7}
+              >
+                {agreementAccepted && (
+                  <Ionicons name="checkmark" size={18} color="white" />
+                )}
+              </TouchableOpacity>
+              <Text style={[styles.agreementCheckboxText, { color: theme.text }]}>
+                I agree to the data usage agreement
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.agreementButton,
+                !agreementAccepted && styles.buttonDisabled,
+                { shadowColor: theme.primary },
+              ]}
+              disabled={!agreementAccepted}
+              onPress={handleAcceptAgreement}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={
+                  agreementAccepted
+                    ? [theme.gradient1, theme.gradient2]
+                    : [theme.primaryLight, theme.primaryLight]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.buttonGradient}
+              >
+                <Text style={styles.primaryButtonText}>Continue</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
@@ -71,7 +169,7 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
             bounces={false}
           >
-            <View style={styles.container}>
+      <View style={styles.container}>
               {/* Logo */}
               <View style={styles.logoContainer}>
                 <View style={[styles.logoWrapper, { shadowColor: theme.primary }]}>
@@ -86,14 +184,14 @@ export default function LoginScreen() {
                 </View>
                 <Text style={[styles.logoText, { color: theme.text }]}>Sexy Kitchen</Text>
                 <Text style={[styles.logoSubtext, { color: theme.textSecondary }]}>Jedlíková 9 • Košice</Text>
-              </View>
+        </View>
 
               {/* Login Card */}
               <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>Welcome back! 👋</Text>
                 <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>
                   Login with your ISIC card to get started
-                </Text>
+        </Text>
 
                 {/* ISIC Input */}
                 <View style={styles.inputGroup}>
@@ -103,14 +201,17 @@ export default function LoginScreen() {
                       styles.inputWrapper,
                       { borderColor: theme.border, backgroundColor: theme.inputBg },
                       error && styles.inputError,
-                      isic.length > 0 && isValidFormat && styles.inputValid,
+                      isic.length > 0 && isValidFormat && {
+                        borderColor: theme.success,
+                        backgroundColor: theme.isDark ? theme.success + "20" : "#F0FDF4",
+                      },
                     ]}
                   >
                     <Ionicons name="card-outline" size={20} color={theme.textSecondary} />
-                    <TextInput
+            <TextInput
                       placeholder="S1234567890"
                       placeholderTextColor={theme.textSecondary}
-                      value={isic}
+              value={isic}
                       onChangeText={(text) => {
                         setIsic(text.toUpperCase());
                         setError(null);
@@ -136,7 +237,7 @@ export default function LoginScreen() {
                   <Text style={[styles.helper, { color: theme.textSecondary }]}>
                     Format: S followed by 10-11 digits
                   </Text>
-                </View>
+          </View>
 
                 {/* Error */}
                 {error && (
@@ -181,7 +282,7 @@ export default function LoginScreen() {
                 </View>
 
                 {/* Face ID Button */}
-                <TouchableOpacity
+          <TouchableOpacity
                   style={[styles.faceButton, { backgroundColor: theme.primaryLight, borderColor: theme.primary + "40" }]}
                   onPress={handleFaceLogin}
                   disabled={isLoading}
@@ -189,16 +290,26 @@ export default function LoginScreen() {
                 >
                   <Ionicons name="scan-outline" size={20} color={theme.primary} />
                   <Text style={[styles.faceButtonText, { color: theme.primary }]}>Login with Face ID</Text>
-                </TouchableOpacity>
-              </View>
+          </TouchableOpacity>
+
+                {/* Register Link */}
+                <View style={styles.registerLinkContainer}>
+                  <Text style={[styles.registerLinkText, { color: theme.textSecondary }]}>
+                    Don't have an account?{" "}
+                  </Text>
+                  <TouchableOpacity onPress={() => router.push("/register")}>
+                    <Text style={[styles.registerLink, { color: theme.primary }]}>Register</Text>
+                  </TouchableOpacity>
+                </View>
+        </View>
 
               {/* Footer */}
               <View style={styles.footer}>
                 <Ionicons name="shield-checkmark-outline" size={16} color={theme.textSecondary} />
                 <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-                  Secure access to shared kitchen facilities
-                </Text>
-              </View>
+          Secure access to shared kitchen facilities
+        </Text>
+      </View>
             </View>
           </ScrollView>
         </TouchableWithoutFeedback>
@@ -302,8 +413,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
   },
   inputValid: {
-    borderColor: "#10B981",
-    backgroundColor: "#F0FDF4",
+    // Will be overridden with theme colors in JSX
   },
   input: {
     flex: 1,
@@ -389,6 +499,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  // Register Link
+  registerLinkContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 24,
+  },
+  registerLinkText: {
+    fontSize: 14,
+  },
+  registerLink: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
   // Footer
   footer: {
     flexDirection: "row",
@@ -398,6 +523,80 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 13,
+    fontWeight: "500",
+  },
+  // Agreement Styles
+  agreementContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  agreementCard: {
+    width: "100%",
+    maxWidth: 500,
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+    maxHeight: "90%",
+  },
+  agreementHeader: {
+    alignItems: "center",
+    marginBottom: 20,
+    gap: 12,
+  },
+  agreementTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  agreementContent: {
+    maxHeight: 200,
+    marginBottom: 20,
+  },
+  agreementText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  agreementCheckbox: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    gap: 12,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  agreementCheckboxText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  agreementButton: {
+    borderRadius: 18,
+    overflow: "hidden",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    marginBottom: 12,
+  },
+  declineButton: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  declineButtonText: {
+    fontSize: 14,
     fontWeight: "500",
   },
 });

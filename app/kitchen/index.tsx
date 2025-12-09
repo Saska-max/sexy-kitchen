@@ -35,6 +35,17 @@ const APPLIANCE_COLORS: Record<string, string> = {
   stove_right: "#FF9800",
 };
 
+// Mock kitchens data (7 floors, one kitchen per floor)
+const MOCK_KITCHENS = [
+  { id: 1, kitchen_number: 1, floor: 1, name: "Kitchen Floor 1", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+  { id: 2, kitchen_number: 1, floor: 2, name: "Kitchen Floor 2", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+  { id: 3, kitchen_number: 1, floor: 3, name: "Kitchen Floor 3", appliance_counts: { microwave: 1, oven: 1, stove_left: 1, stove_right: 1 } },
+  { id: 4, kitchen_number: 1, floor: 4, name: "Kitchen Floor 4", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+  { id: 5, kitchen_number: 1, floor: 5, name: "Kitchen Floor 5", appliance_counts: { microwave: 1, oven: 1, stove_left: 1, stove_right: 1 } },
+  { id: 6, kitchen_number: 1, floor: 6, name: "Kitchen Floor 6", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+  { id: 7, kitchen_number: 1, floor: 7, name: "Kitchen Floor 7", appliance_counts: { microwave: 2, oven: 1, stove_left: 1, stove_right: 1 } },
+];
+
 export default function KitchenSelectScreen() {
   const router = useRouter();
   const { theme } = useTheme();
@@ -50,10 +61,13 @@ export default function KitchenSelectScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
+  // Use mock kitchens if no kitchens are loaded (for UI testing without backend)
+  const availableKitchens = kitchens.length > 0 ? kitchens : MOCK_KITCHENS;
+
   // Sort kitchens by floor
   const sortedKitchens = useMemo(() => {
-    return [...kitchens].sort((a, b) => a.floor - b.floor);
-  }, [kitchens]);
+    return [...availableKitchens].sort((a, b) => a.floor - b.floor);
+  }, [availableKitchens]);
 
   useEffect(() => {
     if (selectedKitchen) {

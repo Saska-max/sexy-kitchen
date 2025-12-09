@@ -1,6 +1,6 @@
 // app/components/TimePicker.tsx - Time Picker with Custom Time Option
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -30,6 +30,8 @@ export default function TimePicker({
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [customHour, setCustomHour] = useState("12");
   const [customMinute, setCustomMinute] = useState("00");
+  const isTypingRef = useRef(false);
+  const lastValueRef = useRef(value);
 
   // Generate time slots
   const timeSlots = useMemo(() => {
@@ -67,19 +69,30 @@ export default function TimePicker({
     }
   }, [timeSlots]);
 
-  // Sync value to custom inputs when value changes externally
+  // Initialize from value on mount only
   useEffect(() => {
     if (value) {
       const [h, m] = value.split(":");
       if (h && m) {
-        // Only update if different to avoid conflicts while typing
-        if (customHour !== h || customMinute !== m) {
-          setCustomHour(h);
-          setCustomMinute(m);
-        }
+        setCustomHour(h);
+        setCustomMinute(m);
+        lastValueRef.current = value;
       }
     }
-  }, [value]);
+  }, []);
+
+  // Sync value to custom inputs when value changes externally (not from user typing)
+  // Only sync if the value is different and user is not actively typing
+  useEffect(() => {
+    if (value && !isTypingRef.current && value !== lastValueRef.current) {
+      const [h, m] = value.split(":");
+      if (h && m && h !== customHour && m !== customMinute) {
+        setCustomHour(h);
+        setCustomMinute(m);
+        lastValueRef.current = value;
+      }
+    }
+  }, [value, customHour, customMinute]);
 
   // Check if current value is in slots
   useEffect(() => {
@@ -89,51 +102,81 @@ export default function TimePicker({
   }, [value, timeSlots]);
 
   const handleHourChange = (text: string) => {
+    isTypingRef.current = true;
+    
     // Remove non-numeric characters
     let h = text.replace(/[^0-9]/g, "").slice(0, 2);
     
-    // Update state immediately
+    // Update state immediately - allow empty string
     setCustomHour(h);
     
-    // Update onChange if we have valid hour and minute
+    // Only validate and update onChange if both fields have values
     if (h !== "" && customMinute !== "") {
       const hNum = parseInt(h);
       const mNum = parseInt(customMinute);
+      
+      // Validate hour range
+      if (hNum > 23) {
+        h = "23";
+        setCustomHour("23");
+      }
       
       if (!isNaN(hNum) && hNum >= 0 && hNum <= 23 && 
           !isNaN(mNum) && mNum >= 0 && mNum <= 59) {
         const hPadded = h.padStart(2, "0");
         const mPadded = customMinute.padStart(2, "0");
-        onChange(`${hPadded}:${mPadded}`);
+        const newValue = `${hPadded}:${mPadded}`;
+        lastValueRef.current = newValue;
+        onChange(newValue);
       }
     } else if (h === "" && customMinute !== "") {
-      // If hour is cleared, don't update
-      return;
+      // If hour is cleared but minute exists, don't update onChange
+      // This allows user to clear and retype
     }
+    
+    // Reset typing flag after a delay
+    setTimeout(() => {
+      isTypingRef.current = false;
+    }, 300);
   };
 
   const handleMinuteChange = (text: string) => {
+    isTypingRef.current = true;
+    
     // Remove non-numeric characters
     let m = text.replace(/[^0-9]/g, "").slice(0, 2);
     
-    // Update state immediately
+    // Update state immediately - allow empty string
     setCustomMinute(m);
     
-    // Update onChange if we have valid hour and minute
+    // Only validate and update onChange if both fields have values
     if (customHour !== "" && m !== "") {
       const hNum = parseInt(customHour);
       const mNum = parseInt(m);
+      
+      // Validate minute range
+      if (mNum > 59) {
+        m = "59";
+        setCustomMinute("59");
+      }
       
       if (!isNaN(hNum) && hNum >= 0 && hNum <= 23 && 
           !isNaN(mNum) && mNum >= 0 && mNum <= 59) {
         const hPadded = customHour.padStart(2, "0");
         const mPadded = m.padStart(2, "0");
-        onChange(`${hPadded}:${mPadded}`);
+        const newValue = `${hPadded}:${mPadded}`;
+        lastValueRef.current = newValue;
+        onChange(newValue);
       }
     } else if (customHour !== "" && m === "") {
-      // If minute is cleared, don't update
-      return;
+      // If minute is cleared but hour exists, don't update onChange
+      // This allows user to clear and retype
     }
+    
+    // Reset typing flag after a delay
+    setTimeout(() => {
+      isTypingRef.current = false;
+    }, 300);
   };
 
   const isSelected = (slot: string) => slot === value;
@@ -243,7 +286,7 @@ export default function TimePicker({
                 maxLength={2}
                 placeholder="12"
                 placeholderTextColor={theme.textSecondary}
-                selectTextOnFocus={true}
+                selectTextOnFocus={false}
               />
             </View>
             <View style={styles.separator}>
@@ -262,7 +305,7 @@ export default function TimePicker({
                 maxLength={2}
                 placeholder="00"
                 placeholderTextColor={theme.textSecondary}
-                selectTextOnFocus={true}
+                selectTextOnFocus={false}
               />
             </View>
           </View>

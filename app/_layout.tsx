@@ -24,6 +24,7 @@ function AppContent() {
   // Routes where bottom bar should be hidden
   const hideBar =
     pathname.startsWith("/login") ||
+    pathname.startsWith("/register") ||
     pathname.startsWith("/face/enroll") ||
     pathname.startsWith("/face/verify") ||
     pathname === "/";
@@ -31,11 +32,12 @@ function AppContent() {
   // Auth guard
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      const publicRoutes = ["/login", "/face/verify", "/"];
+      const publicRoutes = ["/login", "/register", "/face/verify", "/"];
       const isPublicRoute = publicRoutes.some(
         (route) =>
           pathname === route ||
           pathname.startsWith("/login") ||
+          pathname.startsWith("/register") ||
           pathname.startsWith("/face/verify")
       );
 
@@ -63,6 +65,7 @@ function AppContent() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login/index" />
+        <Stack.Screen name="register/index" />
         <Stack.Screen name="home/index" />
         <Stack.Screen name="kitchen/index" />
         <Stack.Screen name="book/index" />
@@ -93,8 +96,8 @@ function AppContent() {
                 styles.tabIconBg,
                 pathname === "/home" && { backgroundColor: theme.primaryLight }
               ]}>
-                <Ionicons
-                  name={pathname === "/home" ? "home" : "home-outline"}
+              <Ionicons
+                name={pathname === "/home" ? "home" : "home-outline"}
                   size={22}
                   color={pathname === "/home" ? theme.primary : tabInactive}
                 />
@@ -137,11 +140,11 @@ function AppContent() {
                 styles.tabIconBg,
                 pathname === "/book" && { backgroundColor: theme.primaryLight }
               ]}>
-                <Ionicons
-                  name={pathname === "/book" ? "calendar" : "calendar-outline"}
+              <Ionicons
+                name={pathname === "/book" ? "calendar" : "calendar-outline"}
                   size={22}
                   color={pathname === "/book" ? theme.primary : tabInactive}
-                />
+              />
               </View>
               <Text style={[
                 styles.tabLabel,
@@ -159,11 +162,11 @@ function AppContent() {
                 styles.tabIconBg,
                 pathname === "/settings" && { backgroundColor: theme.primaryLight }
               ]}>
-                <Ionicons
+              <Ionicons
                   name={pathname === "/settings" ? "settings" : "settings-outline"}
                   size={22}
                   color={pathname === "/settings" ? theme.primary : tabInactive}
-                />
+              />
               </View>
               <Text style={[
                 styles.tabLabel,

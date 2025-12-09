@@ -3,26 +3,26 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View
 } from "react-native";
 import { Calendar } from "react-native-calendars";
 import {
-    Appliance,
-    ApplianceAvailability,
-    getAvailability,
+  Appliance,
+  ApplianceAvailability,
+  getAvailability,
 } from "../../services/api";
 import TimePicker from "../components/TimePicker";
 import { useSmartKitchen } from "../context/SmartKitchenContext";
@@ -86,6 +86,60 @@ export default function BookScreen() {
 
   // Selected appliance for booking
   const [selectedAppliance, setSelectedAppliance] = useState<Appliance | null>(null);
+
+  // Generate mock appliances from kitchen's appliance_counts if no appliances loaded
+  const availableAppliances = useMemo(() => {
+    if (appliances.length > 0) {
+      return appliances;
+    }
+    
+    // Generate mock appliances from selected kitchen's appliance_counts
+    if (!selectedKitchen?.appliance_counts) {
+      return [];
+    }
+
+    const mockAppliances: Appliance[] = [];
+    const counts = selectedKitchen.appliance_counts;
+    let idCounter = 1;
+
+    // Add microwaves
+    for (let i = 0; i < counts.microwave; i++) {
+      mockAppliances.push({
+        id: `microwave-${idCounter++}`,
+        type: "microwave",
+        name: `Microwave ${i + 1}`,
+      });
+    }
+
+    // Add ovens
+    for (let i = 0; i < counts.oven; i++) {
+      mockAppliances.push({
+        id: `oven-${idCounter++}`,
+        type: "oven",
+        name: `Oven ${i + 1}`,
+      });
+    }
+
+    // Add stove left
+    for (let i = 0; i < counts.stove_left; i++) {
+      mockAppliances.push({
+        id: `stove_left-${idCounter++}`,
+        type: "stove_left",
+        name: `Stove Left ${i + 1}`,
+      });
+    }
+
+    // Add stove right
+    for (let i = 0; i < counts.stove_right; i++) {
+      mockAppliances.push({
+        id: `stove_right-${idCounter++}`,
+        type: "stove_right",
+        name: `Stove Right ${i + 1}`,
+      });
+    }
+
+    return mockAppliances;
+  }, [appliances, selectedKitchen]);
 
   // Custom time inputs
   const [startTime, setStartTime] = useState("12:00");
@@ -177,21 +231,33 @@ export default function BookScreen() {
 
   // Check if time slot conflicts with existing reservations
   const checkTimeConflict = (applianceId: string) => {
-    const appAvail = getApplianceAvailability(applianceId);
-    if (!appAvail) return false;
-
     const newStart = parseTimeToMinutes(startTime);
     const newEnd = parseTimeToMinutes(endTime);
 
-    for (const res of appAvail.reservations) {
-      const existingStart = parseTimeToMinutes(res.startTime);
-      const existingEnd = parseTimeToMinutes(res.endTime);
-      
-      if (newStart < existingEnd && newEnd > existingStart) {
-        return true;
+    // Check against availability data from backend
+    const appAvail = getApplianceAvailability(applianceId);
+    if (appAvail) {
+      for (const res of appAvail.reservations) {
+        const existingStart = parseTimeToMinutes(res.startTime);
+        const existingEnd = parseTimeToMinutes(res.endTime);
+        
+        if (newStart < existingEnd && newEnd > existingStart) {
+          return true;
+        }
       }
     }
-    return false;
+
+    // Also check against reservations from context (for mock data)
+    const conflictingReservation = reservations.find((r) => {
+      if (r.applianceId !== applianceId || r.date !== selectedDate || r.status === "cancelled") {
+        return false;
+      }
+      const existingStart = parseTimeToMinutes(r.startTime);
+      const existingEnd = parseTimeToMinutes(r.endTime);
+      return newStart < existingEnd && newEnd > existingStart;
+    });
+
+    return !!conflictingReservation;
   };
 
   // Validate time input
@@ -272,7 +338,7 @@ export default function BookScreen() {
       if (success) {
         Alert.alert("Success! 🎉", "Your reservation has been confirmed!");
         await loadAvailability(selectedDate);
-        setModalVisible(false);
+    setModalVisible(false);
         setSelectedAppliance(null);
       } else {
         Alert.alert("Error", "Failed to create reservation. Please try again.");
@@ -402,11 +468,22 @@ export default function BookScreen() {
             <ActivityIndicator size="small" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading appliances...</Text>
           </View>
+        ) : availableAppliances.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="cube-outline" size={40} color={theme.textSecondary} />
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No appliances available</Text>
+          </View>
         ) : (
           <View style={styles.applianceGrid}>
-            {appliances.map((appliance) => {
-              const appAvail = getApplianceAvailability(appliance.id);
-              const reservationCount = appAvail?.reservations.length || 0;
+            {availableAppliances.map((appliance) => {
+              // Count reservations for this appliance on the selected date
+              const reservationCount = reservations.filter(
+                (r) =>
+                  r.applianceId === appliance.id &&
+                  r.date === selectedDate &&
+                  r.status === "confirmed" &&
+                  r.kitchenId === selectedKitchen?.id
+              ).length;
               const color = APPLIANCE_COLORS[appliance.type] || theme.primary;
 
               return (
@@ -422,7 +499,7 @@ export default function BookScreen() {
                       size={26}
                       color={color}
                     />
-                  </View>
+              </View>
                   <Text style={styles.applianceName}>{appliance.name}</Text>
                   <Text style={styles.applianceType}>
                     {APPLIANCE_LABELS[appliance.type] || appliance.type}
@@ -436,8 +513,8 @@ export default function BookScreen() {
                     />
                     <Text style={styles.statusText}>
                       {reservationCount} booked
-                    </Text>
-                  </View>
+              </Text>
+            </View>
                 </TouchableOpacity>
               );
             })}
@@ -446,16 +523,10 @@ export default function BookScreen() {
 
         {/* Your Bookings Section */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Your Bookings</Text>
-          {reservationsLoading && <ActivityIndicator size="small" color={COLORS.primary} />}
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Your Bookings</Text>
+          {reservationsLoading && <ActivityIndicator size="small" color={theme.primary} />}
         </View>
 
-        {reservationsError && (
-          <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={16} color={COLORS.error} />
-            <Text style={styles.errorBannerText}>{reservationsError}</Text>
-          </View>
-        )}
 
         {reservationsForSelectedDate.length === 0 ? (
           <View style={[styles.card, styles.emptyCard]}>
@@ -469,35 +540,35 @@ export default function BookScreen() {
           reservationsForSelectedDate.map((r) => {
             const color = APPLIANCE_COLORS[r.applianceType] || COLORS.primary;
             return (
-              <View
-                key={r.id}
+            <View
+              key={r.id}
                 style={[styles.card, styles.bookingCard, { borderLeftColor: color }]}
-              >
-                <View style={styles.bookingRow}>
-                  <View style={styles.bookingLeft}>
+            >
+              <View style={styles.bookingRow}>
+                <View style={styles.bookingLeft}>
                     <View style={[styles.bookingIcon, { backgroundColor: `${color}15` }]}>
-                      <Ionicons
+                    <Ionicons
                         name={APPLIANCE_ICONS[r.applianceType] || "cube-outline"}
                         size={22}
                         color={color}
-                      />
-                    </View>
-                    <View>
+                    />
+                  </View>
+                  <View>
                       <Text style={styles.bookingTime}>
                         {r.startTime} - {r.endTime}
                       </Text>
                       <Text style={styles.bookingAppliance}>
                         {r.appliance?.name || APPLIANCE_LABELS[r.applianceType]}
-                      </Text>
-                    </View>
+                    </Text>
                   </View>
+                </View>
 
-                  <View style={styles.bookingRight}>
+                <View style={styles.bookingRight}>
                     <View style={styles.confirmedBadge}>
                       <Ionicons name="checkmark" size={12} color="white" />
-                    </View>
-                    <TouchableOpacity
-                      style={styles.cancelButton}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
                       onPress={() => handleCancelReservation(r.id)}
                       disabled={cancellingId === r.id}
                     >
@@ -506,7 +577,7 @@ export default function BookScreen() {
                       ) : (
                         <Ionicons name="close" size={16} color={theme.error} />
                       )}
-                    </TouchableOpacity>
+                  </TouchableOpacity>
                   </View>
                 </View>
               </View>
@@ -526,16 +597,16 @@ export default function BookScreen() {
               <View style={[styles.modalContent, { backgroundColor: theme.cardBg }]}>
                 <View style={styles.modalHeader}>
                   <Text style={[styles.modalTitle, { color: theme.text }]}>Book Appliance ✨</Text>
-                  <TouchableOpacity
-                    onPress={() => {
+                <TouchableOpacity
+                  onPress={() => {
                       Keyboard.dismiss();
                       setModalVisible(false);
                       setSelectedAppliance(null);
-                    }}
+                  }}
                     style={[styles.modalClose, { backgroundColor: theme.border }]}
                   >
                     <Ionicons name="close" size={24} color={theme.textSecondary} />
-                  </TouchableOpacity>
+                </TouchableOpacity>
                 </View>
 
                 {selectedAppliance && (
@@ -548,7 +619,7 @@ export default function BookScreen() {
                     {/* Selected Appliance */}
                     <View style={[styles.selectedApplianceCard, { backgroundColor: theme.primaryLight, borderColor: theme.primary + "40" }]}>
                       <View
-                        style={[
+                      style={[
                           styles.modalApplianceIcon,
                           {
                             backgroundColor: `${APPLIANCE_COLORS[selectedAppliance.type]}15`,
@@ -619,7 +690,7 @@ export default function BookScreen() {
                                 <Ionicons name="time" size={14} color={theme.error} />
                                 <Text style={[styles.existingSlotText, { color: "#991B1B" }]}>
                                   {res.startTime} - {res.endTime}
-                                </Text>
+                        </Text>
                               </View>
                             ))}
                           </View>
@@ -629,31 +700,31 @@ export default function BookScreen() {
                     })()}
 
                     {/* Buttons */}
-                    <View style={styles.modalButtonsRow}>
-                      <TouchableOpacity
-                        style={[styles.modalButton, styles.cancelModalButton]}
-                        onPress={() => {
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelModalButton]}
+                onPress={() => {
                           Keyboard.dismiss();
-                          setModalVisible(false);
+                  setModalVisible(false);
                           setSelectedAppliance(null);
-                        }}
+                }}
                         disabled={isBooking}
-                      >
+              >
                         <Text style={styles.cancelModalText}>Cancel</Text>
-                      </TouchableOpacity>
+              </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={[
-                          styles.modalButton,
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
                           styles.confirmButton,
                           isBooking && styles.buttonDisabled,
-                        ]}
+                ]}
                         disabled={isBooking}
                         onPress={() => {
                           Keyboard.dismiss();
                           handleConfirm();
                         }}
-                      >
+              >
                         {isBooking ? (
                           <ActivityIndicator size="small" color="white" />
                         ) : (
@@ -662,11 +733,11 @@ export default function BookScreen() {
                             <Text style={styles.confirmModalText}>Confirm</Text>
                           </>
                         )}
-                      </TouchableOpacity>
-                    </View>
+              </TouchableOpacity>
+            </View>
                   </ScrollView>
                 )}
-              </View>
+          </View>
             </TouchableWithoutFeedback>
           </KeyboardAvoidingView>
         </TouchableWithoutFeedback>
@@ -839,6 +910,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 14,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    gap: 12,
   },
   emptyText: { color: COLORS.text, fontSize: 16, fontWeight: "600" },
   emptySubtext: { color: COLORS.textSecondary, fontSize: 14, marginTop: 4 },

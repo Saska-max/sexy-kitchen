@@ -175,12 +175,15 @@ export default function SettingsScreen() {
 
         {/* Logout Button */}
         <TouchableOpacity
-          style={[styles.logoutButton, { borderColor: theme.error }]}
+          style={[styles.logoutButton, { 
+            backgroundColor: theme.isDark ? theme.cardBg : theme.primaryLight,
+            borderColor: theme.border,
+          }]}
           onPress={handleLogout}
           activeOpacity={0.8}
         >
-          <Ionicons name="log-out-outline" size={20} color={theme.error} />
-          <Text style={[styles.logoutText, { color: theme.error }]}>Log Out</Text>
+          <Ionicons name="log-out-outline" size={20} color={theme.primary} />
+          <Text style={[styles.logoutText, { color: theme.primary }]}>Log Out</Text>
         </TouchableOpacity>
 
         <Text style={[styles.footerText, { color: theme.textSecondary }]}>
@@ -381,10 +384,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 2,
     gap: 10,
     marginTop: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   logoutText: {
     fontSize: 16,
